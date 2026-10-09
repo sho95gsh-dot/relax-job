@@ -5,7 +5,6 @@ import sys
 import gspread
 from playwright.sync_api import sync_playwright
 
-# Windows上での日本語出力エラー（UnicodeEncodeError）を防止
 sys.stdout.reconfigure(encoding='utf-8')
 
 def setup_gspread():
@@ -20,6 +19,7 @@ def setup_gspread():
 
 def scrape_rejob():
     new_jobs = []
+    # 現在設定されているURL
     target_url = "https://relax-job.com/search?business_type=biyoshi.riyoshi&city=28201.28210.28216.28229.28381.28382.28464&employment=arbeit.business-consignment.contract-employee.other.regular-member&facility_type=barber-shop.hair-salon.haircolor-shop.haircut-shop.spa&pref=28&sort=new"
 
     with sync_playwright() as p:
@@ -32,39 +32,47 @@ def scrape_rejob():
         print(f"Accessing: {target_url}")
         page.goto(target_url, wait_until="domcontentloaded")
         
-        # 画面描画待ち
-        page.wait_for_timeout(5000)
+        print("ページの読み込みを10秒待機しています...")
+        page.wait_for_timeout(10000)
 
-        cards = page.query_selector_all("article, .job-card, .search-result-item, .job-item")
+        # クラス名に依存せず、求人詳細（/job/）へのリンクを画面全体から直接探す
+        links = page.query_selector_all("a")
         today = datetime.date.today().strftime("%Y-%m-%d")
+        seen_urls = set()
 
-        print(f"画面から {len(cards)} 件の求人カードを発見しました。")
-
-        for card in cards:
+        for link in links:
             try:
-                title_elem = card.query_selector("h2, h3, .job-card__title, .title")
-                title = title_elem.inner_text().strip() if title_elem else "不明"
+                href = link.get_attribute("href")
+                # hrefがない、または求人ページへのリンクじゃない場合はスキップ
+                if not href or "/job/" not in href:
+                    continue
 
-                link_elem = card.query_selector("a")
-                href = link_elem.get_attribute("href") if link_elem else ""
-                full_url = (
-                    f"https://relax-job.com{href}"
-                    if href.startswith("/")
-                    else href
-                )
+                full_url = f"https://relax-job.com{href}" if href.startswith("/") else href
+                
+                # 重複カウントを防止
+                if full_url in seen_urls:
+                    continue
+                seen_urls.add(full_url)
 
-                company_elem = card.query_selector(".company-name, .job-card__company, .company")
-                company = company_elem.inner_text().strip() if company_elem else "不明"
+                # リンクを含む一番近い「枠（li または div）」を探す
+                parent = link.evaluate_handle("el => el.closest('li') || el.closest('div')")
+                text = parent.inner_text().strip() if parent else ""
+                
+                # テキストが短すぎるものはヘッダー等の関係ないリンクなので無視
+                if len(text) < 15:
+                    continue
 
-                location_elem = card.query_selector(".location, .job-card__location, .access")
-                location = location_elem.inner_text().strip() if location_elem else "不明"
+                # まとまったテキストから最初の2行を抽出して「タイトル・会社名」の代わりにする
+                lines = [line.strip() for line in text.split('\n') if line.strip()]
+                title = lines[0] if len(lines) > 0 else "不明"
+                company = lines[1] if len(lines) > 1 else "不明"
 
-                if title != "不明" and full_url:
-                    new_jobs.append([today, company, title, location, full_url])
+                new_jobs.append([today, company, title, "スプレッドシート上で確認", full_url])
 
             except Exception as e:
                 continue
 
+        print(f"画面から {len(new_jobs)} 件の求人リンクを発見しました。")
         browser.close()
 
     return new_jobs
