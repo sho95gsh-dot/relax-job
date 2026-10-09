@@ -19,7 +19,7 @@ def setup_gspread():
 
 def scrape_rejob():
     new_jobs = []
-    target_url = "https://relax-job.com/search?keyword=%E3%82%AA%E3%83%BC%E3%83%97%E3%83%8B%E3%83%B3%E3%82%B0"
+    target_url = "https://relax-job.com/search?business_type=biyoshi.riyoshi&city=28201.28210.28216.28229.28381.28382.28464&employment=arbeit.business-consignment.contract-employee.other.regular-member&facility_type=barber-shop.hair-salon.haircolor-shop.haircut-shop.spa&pref=28&sort=new"
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
